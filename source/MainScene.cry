@@ -1,0 +1,289 @@
+import Graphics2D;
+import Graphics2DText;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+const X_RES = 800;
+const Y_RES = 600;
+const FPS = 60.0;
+const ELAPSED_TIME = 1.0 / FPS;
+
+const RADIUS = 20.0;
+const ACCEL = 0.8;
+const MAX_SPEED = 5.0;
+const MAX_SWITCHES = 2;
+const GRAVITY = 0.4;
+const TERMINAL = 30.0;//10.0;
+const FRICTION = 0.85;
+
+class Ob {
+	field pos;
+	field size;
+	constructor(pos, size) {
+		this.pos = pos;
+		this.size = size;
+	}
+}
+class HWall {
+	field left;
+	field right;
+	field y;
+	constructor(left, right, y) {
+		this.left = left;
+		this.right = right;
+		this.y = y;
+	}
+}
+class VWall {
+	field x;
+	field bottom;
+	field top;
+	constructor(x, bottom, top) {
+		this.x = x;
+		this.bottom = bottom;
+		this.top = top;
+	}
+}
+
+class MainScene : AbstractScene {
+	field pos = [0.0, 0.0];
+	field vel = [0.0, 0.0];
+	field switches = 1;
+
+	field obs = [];
+	field roofs = [];
+	field floors = [];
+	field rightWalls = [];
+	field leftWalls = [];
+
+	field gravity = [0, -GRAVITY];
+
+	constructor() {
+		sliver = 0.1;
+		this.obs.add(new Ob([-40, -40], [80, sliver]));
+		this.obs.add(new Ob([-40, -40], [sliver, 80]));
+		this.obs.add(new Ob([-40, 40 - sliver], [80, sliver]));
+		this.obs.add(new Ob([40 - sliver, -40], [sliver, 80]));
+
+		this.obs.add(new Ob([-10, -10], [ 7,  2]));
+		this.obs.add(new Ob([  3, -10], [ 6,  2]));
+		this.obs.add(new Ob([-10,   8], [20,  2]));
+		this.obs.add(new Ob([-10, -10], [ 2, 20]));
+		this.obs.add(new Ob([  8, -10], [ 2, 20]));
+		scale = 20.0;
+		for (ob : this.obs) {
+			ob.pos[0] *= scale;
+			ob.pos[1] *= scale;
+			ob.size[0] *= scale;
+			ob.size[1] *= scale;
+		}
+
+		// Generate colliders for each obstacle.
+		for (ob : this.obs) {
+			this.roofs.add(new HWall(ob.pos[0], ob.pos[0] + ob.size[0], ob.pos[1]));
+			this.floors.add(new HWall(ob.pos[0], ob.pos[0] + ob.size[0], ob.pos[1] + ob.size[1]));
+			this.rightWalls.add(new VWall(ob.pos[0], ob.pos[1], ob.pos[1] + ob.size[1]));
+			this.leftWalls.add(new VWall(ob.pos[0] + ob.size[0], ob.pos[1], ob.pos[1] + ob.size[1]));
+		}
+	}
+
+	static function d(pos1, pos2) {
+		return ((pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2) ** 0.5;
+	}
+	static function d2(pos1, pos2) {
+		return (pos1[0] - pos2[0]) ** 2 + (pos1[1] - pos2[1]) ** 2;
+	}
+	static function len(pos) {
+		return (pos[0] ** 2 + pos[1] ** 2) ** 0.5;
+	}
+	static function len2(pos) {
+		return pos[0] ** 2 + pos[1] ** 2;
+	}
+	static function vecTo(pos, target) {
+		return [target[0] - pos[0], target[1] - pos[1]];
+	}
+	static function add(pos, vec) {
+		pos[0] += vec[0];
+		pos[1] += vec[1];
+	}
+	static function sub(pos, vec) {
+		pos[0] -= vec[0];
+		pos[1] -= vec[1];
+	}
+	static function sum(pos, vec) {
+		return [pos[0] + vec[0], pos[1] + vec[1]];
+	}
+	static function diff(pos, vec) {
+		return [pos[0] - vec[0], pos[1] - vec[1]];
+	}
+	static function normalize(vec, newLen = 1.0) {
+		len = MainScene.len(vec);
+		vec[0] *= newLen / len;
+		vec[1] *= newLen / len;
+	}
+
+	function update(inputManager, events) {
+		// Update velocity.
+		MainScene.add(this.vel, this.gravity);
+		// Limit velocity to terminal velocity.
+		if (MainScene.len2(this.vel) > TERMINAL * TERMINAL) {
+			MainScene.normalize(this.vel, TERMINAL);
+		}
+
+		// Check for collisions.
+		right = this.pos[0] + RADIUS;
+		left = this.pos[0] - RADIUS;
+		top = this.pos[1] + RADIUS;
+		bottom = this.pos[1] - RADIUS;
+		if (this.vel[0] > 0.0) {
+			// Check for collisions with right walls.
+			for (wall : this.rightWalls) {
+				if (right < wall.x && wall.x < right + this.vel[0] && bottom < wall.top && wall.bottom < top) {
+					this.pos = [wall.x - RADIUS - 1, this.pos[1]];
+					this.vel = [0.0, FRICTION * this.vel[1]];
+					this.switches = MAX_SWITCHES;
+				}
+			}
+		} else if (this.vel[0] < 0.0) {
+			// Check for collisions with left walls.
+			for (wall : this.leftWalls) {
+				if (wall.x < left && left + this.vel[0] < wall.x && bottom < wall.top && wall.bottom < top) {
+					this.pos = [wall.x + RADIUS + 1, this.pos[1]];
+					this.vel = [0.0, FRICTION * this.vel[1]];
+					this.switches = MAX_SWITCHES;
+				}
+			}
+		}
+		if (this.vel[1] > 0.0) {
+			// Check for collisions with roofs.
+			for (wall : this.roofs) {
+				if (top < wall.y && wall.y < top + this.vel[1] && left < wall.right && wall.left < right) {
+					this.pos = [this.pos[0], wall.y - RADIUS - 1];
+					this.vel = [FRICTION * this.vel[0], 0.0];
+					this.switches = MAX_SWITCHES;
+				}
+			}
+		} else if (this.vel[1] < 0.0) {
+			// Check for collisions with floors.
+			for (wall : this.floors) {
+				if (wall.y < bottom && bottom + this.vel[1] < wall.y && left < wall.right && wall.left < right) {
+					this.pos = [this.pos[0], wall.y + RADIUS + 1];
+					this.vel = [FRICTION * this.vel[0], 0.0];
+					this.switches = MAX_SWITCHES;
+				}
+			}
+		}
+		collision = null;
+		// Execute earliest collision response.
+		if (collision != null) {
+			print("Had an accident.");
+			this.pos = collision.newPos;
+			this.vel = collision.newVel;
+		}
+
+		// Update position.
+		MainScene.add(this.pos, this.vel);
+
+		// Controls.
+		for (e : events) {
+			switch (e.type) {
+				case EventType.KEY:
+					if (e.down) {
+						switch (e.key) {
+							case KeyboardKey.RIGHT:
+								if (this.switches > 0) {
+									this.gravity = [GRAVITY, 0.0];
+									--this.switches;
+								}
+								break;
+							case KeyboardKey.LEFT:
+								if (this.switches > 0) {
+									this.gravity = [-GRAVITY, 0.0];
+									--this.switches;
+								}
+								break;
+							case KeyboardKey.UP:
+								if (this.switches > 0) {
+									this.gravity = [0.0, GRAVITY];
+									--this.switches;
+								}
+								break;
+							case KeyboardKey.DOWN:
+								if (this.switches > 0) {
+									this.gravity = [0.0, -GRAVITY];
+									--this.switches;
+								}
+								break;
+							default:
+								break;
+						}
+					}
+					break;
+				default:
+					break;
+			}
+		}
+		if (this.switches == MAX_SWITCHES) {
+			if (this.gravity[0] == 0.0) {
+				if (this.vel[0] < MAX_SPEED && inputManager.isKeyPressed(KeyboardKey.D)) {
+					this.vel[0] += ACCEL;
+				}
+				if (this.vel[0] > -MAX_SPEED && inputManager.isKeyPressed(KeyboardKey.A)) {
+					this.vel[0] -= ACCEL;
+				}
+			}
+			if (this.gravity[1] == 0.0) {
+				if (this.vel[1] < MAX_SPEED && inputManager.isKeyPressed(KeyboardKey.W)) {
+					this.vel[1] += ACCEL;
+				}
+				if (this.vel[1] > -MAX_SPEED && inputManager.isKeyPressed(KeyboardKey.S)) {
+					this.vel[1] -= ACCEL;
+				}
+			}
+		}
+	}
+
+	function render() {
+		Graphics2D.Draw.fill(255, 255, 255);
+
+		switch (this.switches) {
+			case 0:
+				color = [96, 128, 160];
+				break;
+			case 1:
+				color = [64, 128, 192];
+				break;
+			case 2:
+				color = [0, 128, 255];
+				break;
+		}
+		x = X_RES / 2.0 - RADIUS - 1;
+		y = Y_RES / 2.0 - RADIUS - 1;
+		Graphics2D.Draw.rectangle
+			( x
+			, y
+			, 2 * (RADIUS + 1)
+			, 2 * (RADIUS + 1)
+			, color[0], color[1], color[2]
+			);
+		if (this.gravity[0] > 0.0) {
+			image = Images.get("smile-left.png");
+		} else if (this.gravity[0] < 0.0) {
+			image = Images.get("smile-right.png");
+		} else if (this.gravity[1] > 0.0) {
+			image = Images.get("smile-down.png");
+		} else if (this.gravity[1] < 0.0) {
+			image = Images.get("smile-up.png");
+		}
+		image.draw(x, y);
+		//Graphics2D.Draw.ellipse(X_RES / 2.0 - RADIUS, Y_RES / 2.0 - RADIUS, 2 * RADIUS, 2 * RADIUS, 255, 128, 0);
+		for (ob : this.obs) {
+			Graphics2D.Draw.rectangle
+				( X_RES / 2.0 + ob.pos[0] - this.pos[0], Y_RES / 2.0 - ob.pos[1] + this.pos[1] - ob.size[1]
+				, ob.size[0], ob.size[1]
+				, 0, 0, 0
+				);
+		}
+	}
+}
