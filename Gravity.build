@@ -11,7 +11,8 @@
 	"source": "source",
 	"compilerlocale": "en",
 	"output": "output/%TARGET_NAME%",
-
+	"delegate-main-to": "TwoCansAlpha4",
+	
 	"image-sheets": [
 		{
 			"id": "twocans_everything",
@@ -27,7 +28,8 @@
 		{ "name": "screen_width", "value": 800 },
 		{ "name": "screen_height", "value": 600 },
 		{ "name": "use_60_fps", "value": true },
-		{ "name": "enable_wasd", "value": true }
+		{ "name": "enable_wasd", "value": true },
+		{ "name": "thumbnail", "value": "assets/icon200.png" }
 	],
 
 	"targets": [
